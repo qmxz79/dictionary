@@ -16,7 +16,7 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(BASE_DIR, "app", "src", "main", "assets")
 OUTPUT_DB = os.path.join(BASE_DIR, "dictionary.db")
-OUTPUT_GZ = os.path.join(ASSETS_DIR, "dictionary.db.gz")
+OUTPUT_GZ = os.path.join(ASSETS_DIR, "dictionary.bin")
 
 os.makedirs(ASSETS_DIR, exist_ok=True)
 sys.path.insert(0, os.path.join(BASE_DIR, "tools"))

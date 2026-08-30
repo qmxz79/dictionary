@@ -4,8 +4,11 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.PushbackInputStream
 import java.util.zip.GZIPInputStream
 
 class DatabaseHelper private constructor(private val context: Context) :
@@ -14,8 +17,13 @@ class DatabaseHelper private constructor(private val context: Context) :
     companion object {
         private const val TAG = "DatabaseHelper"
         const val DB_NAME = "dictionary.db"
-        const val DB_ASSET_GZ = "dictionary.db.gz"
         private const val DB_VERSION = 1
+
+        private val ASSET_CANDIDATES = listOf(
+            "dictionary.bin",
+            "dictionary.db.gz",
+            "dictionary.db"
+        )
 
         @Volatile
         private var instance: DatabaseHelper? = null
@@ -44,6 +52,7 @@ class DatabaseHelper private constructor(private val context: Context) :
     }
 
     private fun isDatabaseValid(file: File): Boolean {
+        if (!file.exists() || file.length() < 1000L) return false
         return try {
             SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 db.rawQuery("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='words'", null).use { cursor ->
@@ -57,36 +66,64 @@ class DatabaseHelper private constructor(private val context: Context) :
     }
 
     private fun unpackAssetDatabase() {
-        Log.i(TAG, "Unpacking pre-bundled database from assets ($DB_ASSET_GZ)...")
+        Log.i(TAG, "Unpacking pre-bundled database from assets...")
         val tempFile = File(dbFile.parentFile, "$DB_NAME.tmp")
-        try {
-            if (tempFile.exists()) tempFile.delete()
+        var copied = false
 
-            context.assets.open(DB_ASSET_GZ).use { assetIn ->
-                GZIPInputStream(assetIn).use { gzipIn ->
+        for (assetName in ASSET_CANDIDATES) {
+            try {
+                if (tempFile.exists()) tempFile.delete()
+
+                context.assets.open(assetName).use { rawIn ->
+                    val pushbackIn = PushbackInputStream(rawIn, 2)
+                    val header = ByteArray(2)
+                    val bytesRead = pushbackIn.read(header)
+                    if (bytesRead == 2) {
+                        pushbackIn.unread(header)
+                    }
+
+                    // Check if file is GZIP compressed (magic number 0x1f8b)
+                    val isGzip = (bytesRead == 2 &&
+                            header[0] == 0x1f.toByte() &&
+                            header[1] == 0x8b.toByte())
+
+                    val inStream: InputStream = if (isGzip) {
+                        GZIPInputStream(pushbackIn)
+                    } else {
+                        BufferedInputStream(pushbackIn)
+                    }
+
                     FileOutputStream(tempFile).use { fileOut ->
                         val buffer = ByteArray(65536)
-                        var bytesRead: Int
-                        while (gzipIn.read(buffer).also { bytesRead = it } != -1) {
-                            fileOut.write(buffer, 0, bytesRead)
+                        var readLen: Int
+                        while (inStream.read(buffer).also { readLen = it } != -1) {
+                            fileOut.write(buffer, 0, readLen)
                         }
                         fileOut.flush()
                         fileOut.fd.sync()
                     }
                 }
-            }
 
-            if (dbFile.exists()) dbFile.delete()
-            val success = tempFile.renameTo(dbFile)
-            Log.i(TAG, "Database unpacked successfully (renamed: $success): ${dbFile.absolutePath} (${dbFile.length()} bytes)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to unpack database from asset", e)
-            if (tempFile.exists()) tempFile.delete()
+                if (tempFile.exists() && tempFile.length() > 1000L) {
+                    if (dbFile.exists()) dbFile.delete()
+                    val renamed = tempFile.renameTo(dbFile)
+                    Log.i(TAG, "Successfully extracted $assetName -> ${dbFile.absolutePath} (${dbFile.length()} bytes, renamed: $renamed)")
+                    copied = true
+                    break
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not load asset candidate $assetName: ${e.message}")
+                if (tempFile.exists()) tempFile.delete()
+            }
+        }
+
+        if (!copied) {
+            Log.e(TAG, "CRITICAL: None of the asset database candidates could be unpacked!")
         }
     }
 
     override fun onCreate(db: SQLiteDatabase?) {
-        // Create basic schema in case asset unpacking had issues
+        // Fallback schema in case asset unpacking fails
         db?.executescriptSafely("""
             CREATE TABLE IF NOT EXISTS words (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
