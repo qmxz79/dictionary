@@ -1,0 +1,64 @@
+name: Build & Publish Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK
+        run: |
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/BilingualDictionary-v1.0.0.apk
+
+      - name: Upload Release Assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Release ${{ github.ref_name }}
+          body: |
+            ### 🚀 双语字典 (Bilingual Dictionary) Android v1.0.0 发布
+
+            #### ✨ 主要特性
+            - ⚡ **智能双语自动识别** (英语 / 马来语 -> 中文)
+            - 🔄 **中文双向互译** (中 -> 英 / 马)
+            - 🇲🇾 **内置马来语形态词缀还原引擎** (自动剥离前缀、后缀并推导词根)
+            - 🌐 **离线优先 + 智能网络兜底** (内置 76,000+ 离线词条，查词自动缓存)
+            - 📱 **TTS 原生发音、生词本收藏、查词历史、系统划词查词**
+            
+            #### 📦 下载安装
+            直接下载下方的 `BilingualDictionary-v1.0.0.apk` 安装到安卓手机即可使用。
+          files: |
+            app/build/outputs/apk/release/BilingualDictionary-v1.0.0.apk
+          draft: false
+          prerelease: false
