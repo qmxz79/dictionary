@@ -1,0 +1,19 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# App build outputs
+app/build/
+
+# Temporary data files (generated SQLite db & raw csv)
+dictionary.db
+tools/data/
+__pycache__/
+*.pyc

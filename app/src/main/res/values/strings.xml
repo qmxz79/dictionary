@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">双语字典</string>
+    <string name="search_hint">输入英语/马来语/中文...</string>
+    
+    <!-- Search Modes -->
+    <string name="mode_auto">⚡ 智能识别 (英/马 → 中)</string>
+    <string name="mode_zh_to_en">🇨🇳 中 → 🇬🇧 英</string>
+    <string name="mode_zh_to_ms">🇨🇳 中 → 🇲🇾 马</string>
+
+    <!-- Language Labels -->
+    <string name="lang_en">英语 (EN)</string>
+    <string name="lang_ms">马来语 (MS)</string>
+    <string name="lang_zh">中文 (ZH)</string>
+    <string name="lang_online">网络兜底翻译</string>
+
+    <!-- Actions & UI Labels -->
+    <string name="copied_to_clipboard">已复制释义到剪贴板</string>
+    <string name="added_to_favorites">已加入生词本</string>
+    <string name="removed_from_favorites">已移出生词本</string>
+    <string name="no_results">本地词库暂未收录该词条</string>
+    <string name="searching_online">正在联网查询释义...</string>
+    <string name="online_failed">网络查询失败，请检查网络连接</string>
+    <string name="root_word">词根还原</string>
+    <string name="source_local">离线本地</string>
+    <string name="source_online">在线缓存</string>
+
+    <!-- Navigation Tabs -->
+    <string name="nav_search">查词</string>
+    <string name="nav_favorites">生词本</string>
+    <string name="nav_history">历史</string>
+    <string name="clear_history">清空历史</string>
+    <string name="history_empty">暂无查词历史</string>
+    <string name="favorites_empty">生词本还是空的，查词时点星星收藏吧</string>
+</resources>

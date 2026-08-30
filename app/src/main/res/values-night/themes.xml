@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.BilingualDictionary" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="android:windowBackground">#121212</item>
+        <item name="android:statusBarColor">#1E1E1E</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
