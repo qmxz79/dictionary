@@ -44,37 +44,41 @@
                 android:layout_marginStart="10dp"
                 android:layout_weight="1"
                 android:textColor="@color/text_primary"
-                android:textSize="19sp"
+                android:textSize="20sp"
                 android:textStyle="bold"
                 tools:text="selamat" />
 
-            <!-- TTS Speaker -->
+            <!-- TTS Speaker with enlarged touch target -->
             <ImageButton
                 android:id="@+id/btnSpeak"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="发音"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_volume" />
 
-            <!-- Favorite Star -->
+            <!-- Favorite Star with enlarged touch target -->
             <ImageButton
                 android:id="@+id/btnFavorite"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="2dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="收藏"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_star_border" />
 
-            <!-- Copy Button -->
+            <!-- Copy Button with enlarged touch target -->
             <ImageButton
                 android:id="@+id/btnCopy"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="2dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="复制"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_copy" />
         </LinearLayout>
 
@@ -92,7 +96,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 tools:text="/səˈlɑːmæt/" />
 
             <TextView
@@ -101,7 +105,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:textColor="@color/primary"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:textStyle="italic"
                 tools:text="adj./n." />
         </LinearLayout>
@@ -132,9 +136,9 @@
             android:id="@+id/tvDefinition"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="3dp"
+            android:lineSpacingExtra="4dp"
             android:textColor="@color/text_primary"
-            android:textSize="15sp"
+            android:textSize="16sp"
             tools:text="1. 平安，安全；恭祝\n2. 早上好 (Selamat pagi)" />
 
         <!-- Example Sentence -->

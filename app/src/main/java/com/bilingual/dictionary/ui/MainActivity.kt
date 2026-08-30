@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bilingual.dictionary.DictionaryApplication
 import com.bilingual.dictionary.R
 import com.bilingual.dictionary.data.model.DictionaryEntry
@@ -41,6 +42,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: DictionaryRepository
     private var tts: TextToSpeech? = null
+    private var isTtsInitialized = false
 
     private lateinit var wordAdapter: WordCardAdapter
     private lateinit var suggestionAdapter: SuggestionAdapter
@@ -109,6 +111,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding.rvResults.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = wordAdapter
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                        hideSuggestions()
+                        hideKeyboard()
+                    }
+                }
+            })
         }
 
         // 2. Suggestion Adapter
@@ -116,6 +126,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             binding.etSearch.setText(suggestion.word)
             binding.etSearch.setSelection(suggestion.word.length)
             hideSuggestions()
+            hideKeyboard()
             performSearch(suggestion.word)
         }
         binding.rvSuggestions.apply {
@@ -129,6 +140,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 binding.bottomNav.selectedItemId = R.id.nav_search
                 binding.etSearch.setText(historyItem.query)
                 binding.etSearch.setSelection(historyItem.query.length)
+                hideSuggestions()
+                hideKeyboard()
                 performSearch(historyItem.query)
             },
             onDeleteClick = { historyItem ->
@@ -149,6 +162,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 binding.bottomNav.selectedItemId = R.id.nav_search
                 binding.etSearch.setText(favItem.word)
                 binding.etSearch.setSelection(favItem.word.length)
+                hideSuggestions()
+                hideKeyboard()
                 performSearch(favItem.word)
             },
             onRemoveClick = { favItem ->
@@ -179,12 +194,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (query.isNotEmpty() && !repository.isChinese(query)) {
                     suggestJob?.cancel()
                     suggestJob = lifecycleScope.launch {
-                        delay(150)
+                        delay(120)
                         try {
                             val suggestions = repository.getSuggestions(query)
-                            if (suggestions.isNotEmpty() && binding.panelSearch.isVisible) {
+                            if (suggestions.isNotEmpty() && binding.panelSearch.isVisible && binding.etSearch.hasFocus()) {
                                 suggestionAdapter.submitList(suggestions)
-                                binding.rvSuggestions.visibility = View.VISIBLE
+                                binding.cardSuggestions.visibility = View.VISIBLE
                             } else {
                                 hideSuggestions()
                             }
@@ -203,8 +218,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
                 val query = binding.etSearch.text.toString().trim()
                 if (query.isNotEmpty()) {
-                    hideKeyboard()
                     hideSuggestions()
+                    hideKeyboard()
                     performSearch(query)
                 }
                 true
@@ -214,6 +229,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         binding.btnClear.setOnClickListener {
+            suggestJob?.cancel()
             binding.etSearch.text.clear()
             wordAdapter.submitList(emptyList())
             binding.layoutEmptySearch.visibility = View.VISIBLE
@@ -235,6 +251,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             val query = binding.etSearch.text.toString().trim()
             if (query.isNotEmpty()) {
+                hideSuggestions()
+                hideKeyboard()
                 performSearch(query)
             }
         }
@@ -243,6 +261,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun setupBottomNavigation() {
         binding.bottomNav.setOnItemSelectedListener { item ->
             hideSuggestions()
+            hideKeyboard()
             when (item.itemId) {
                 R.id.nav_search -> {
                     binding.panelSearch.visibility = View.VISIBLE
@@ -281,6 +300,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun performSearch(query: String) {
+        suggestJob?.cancel()
+        hideSuggestions()
         searchJob?.cancel()
         searchJob = lifecycleScope.launch {
             try {
@@ -359,22 +380,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun speakWord(entry: DictionaryEntry) {
         try {
+            if (tts == null || !isTtsInitialized) {
+                initTts()
+                Toast.makeText(this, "正在准备语音发音...", Toast.LENGTH_SHORT).show()
+                return
+            }
+
             tts?.let { player ->
-                val lang = when (entry.lang.lowercase()) {
+                val targetLocale = when (entry.lang.lowercase()) {
                     "ms" -> Locale("ms", "MY")
                     "zh" -> Locale.CHINESE
                     else -> Locale.US
                 }
-                player.language = lang
+
+                val status = player.setLanguage(targetLocale)
+                if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    // Fallback to standard US/English
+                    player.language = Locale.US
+                }
+                player.setSpeechRate(0.95f)
                 player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "TTS speak error", e)
+            Toast.makeText(this, "语音发音异常", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun hideSuggestions() {
-        binding.rvSuggestions.visibility = View.GONE
+        binding.cardSuggestions.visibility = View.GONE
     }
 
     private fun hideKeyboard() {
@@ -389,7 +423,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         try {
             if (status == TextToSpeech.SUCCESS) {
+                isTtsInitialized = true
                 tts?.language = Locale.US
+            } else {
+                isTtsInitialized = false
             }
         } catch (e: Exception) {
             Log.w(TAG, "TTS onInit error: ${e.message}")
