@@ -1,14 +1,18 @@
 package com.bilingual.dictionary.data.db
 
 import android.content.ContentValues
-import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import com.bilingual.dictionary.data.model.DictionaryEntry
 import com.bilingual.dictionary.data.model.FavoriteItem
 import com.bilingual.dictionary.data.model.HistoryItem
 import com.bilingual.dictionary.data.model.SuggestionItem
 
 class DictionaryDao(private val dbHelper: DatabaseHelper) {
+
+    companion object {
+        private const val TAG = "DictionaryDao"
+    }
 
     private val readableDb: SQLiteDatabase
         get() = dbHelper.readableDatabase
@@ -32,24 +36,28 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
 
         val favoriteWords = getFavoriteKeys()
 
-        readableDb.rawQuery(query, args).use { cursor ->
-            while (cursor.moveToNext()) {
-                val w = cursor.getString(1)
-                val l = cursor.getString(3)
-                results.add(
-                    DictionaryEntry(
-                        id = cursor.getLong(0),
-                        word = w,
-                        displayWord = cursor.getString(2) ?: w,
-                        lang = l,
-                        phonetic = cursor.getString(4),
-                        pos = cursor.getString(5),
-                        definition = cursor.getString(6),
-                        example = cursor.getString(7),
-                        isFavorite = favoriteWords.contains("$w|$l")
+        try {
+            readableDb.rawQuery(query, args).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val w = cursor.getString(1)
+                    val l = cursor.getString(3)
+                    results.add(
+                        DictionaryEntry(
+                            id = cursor.getLong(0),
+                            word = w,
+                            displayWord = cursor.getString(2) ?: w,
+                            lang = l,
+                            phonetic = cursor.getString(4),
+                            pos = cursor.getString(5),
+                            definition = cursor.getString(6) ?: "",
+                            example = cursor.getString(7),
+                            isFavorite = favoriteWords.contains("$w|$l")
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "searchExact query error: ${e.message}")
         }
         return results
     }
@@ -65,18 +73,22 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
         val sql = "SELECT word, lang, definition FROM words WHERE word LIKE ? ORDER BY LENGTH(word) ASC LIMIT ?"
         val args = arrayOf("$prefix%", limit.toString())
 
-        readableDb.rawQuery(sql, args).use { cursor ->
-            while (cursor.moveToNext()) {
-                val def = cursor.getString(2) ?: ""
-                val cleanDef = def.replace("\n", " ").trim()
-                results.add(
-                    SuggestionItem(
-                        word = cursor.getString(0),
-                        lang = cursor.getString(1),
-                        definition = cleanDef
+        try {
+            readableDb.rawQuery(sql, args).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val def = cursor.getString(2) ?: ""
+                    val cleanDef = def.replace("\n", " ").trim()
+                    results.add(
+                        SuggestionItem(
+                            word = cursor.getString(0),
+                            lang = cursor.getString(1),
+                            definition = cleanDef
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "searchSuggestions error: ${e.message}")
         }
         return results
     }
@@ -112,24 +124,28 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
         val likeArg = "%$cleanKeyword%"
         val args = if (targetLang != null) arrayOf(cleanKeyword, likeArg, targetLang) else arrayOf(cleanKeyword, likeArg)
 
-        readableDb.rawQuery(sql, args).use { cursor ->
-            while (cursor.moveToNext()) {
-                val w = cursor.getString(1)
-                val l = cursor.getString(3)
-                results.add(
-                    DictionaryEntry(
-                        id = cursor.getLong(0),
-                        word = w,
-                        displayWord = cursor.getString(2) ?: w,
-                        lang = l,
-                        phonetic = cursor.getString(4),
-                        pos = cursor.getString(5),
-                        definition = cursor.getString(6),
-                        example = cursor.getString(7),
-                        isFavorite = favoriteWords.contains("$w|$l")
+        try {
+            readableDb.rawQuery(sql, args).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val w = cursor.getString(1)
+                    val l = cursor.getString(3)
+                    results.add(
+                        DictionaryEntry(
+                            id = cursor.getLong(0),
+                            word = w,
+                            displayWord = cursor.getString(2) ?: w,
+                            lang = l,
+                            phonetic = cursor.getString(4),
+                            pos = cursor.getString(5),
+                            definition = cursor.getString(6) ?: "",
+                            example = cursor.getString(7),
+                            isFavorite = favoriteWords.contains("$w|$l")
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "searchReverseChinese error: ${e.message}")
         }
         return results
     }
@@ -137,59 +153,80 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
     // ================= FAVORITES =================
     private fun getFavoriteKeys(): Set<String> {
         val set = mutableSetOf<String>()
-        readableDb.rawQuery("SELECT word, lang FROM user_favorites", null).use { cursor ->
-            while (cursor.moveToNext()) {
-                set.add("${cursor.getString(0)}|${cursor.getString(1)}")
+        try {
+            readableDb.rawQuery("SELECT word, lang FROM user_favorites", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    set.add("${cursor.getString(0)}|${cursor.getString(1)}")
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "getFavoriteKeys error: ${e.message}")
         }
         return set
     }
 
     fun getAllFavorites(): List<FavoriteItem> {
         val list = mutableListOf<FavoriteItem>()
-        readableDb.rawQuery(
-            "SELECT id, word, lang, phonetic, pos, definition, timestamp FROM user_favorites ORDER BY timestamp DESC",
-            null
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                list.add(
-                    FavoriteItem(
-                        id = cursor.getLong(0),
-                        word = cursor.getString(1),
-                        lang = cursor.getString(2),
-                        phonetic = cursor.getString(3),
-                        pos = cursor.getString(4),
-                        definition = cursor.getString(5),
-                        timestamp = cursor.getLong(6)
+        try {
+            readableDb.rawQuery(
+                "SELECT id, word, lang, phonetic, pos, definition, timestamp FROM user_favorites ORDER BY timestamp DESC",
+                null
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    list.add(
+                        FavoriteItem(
+                            id = cursor.getLong(0),
+                            word = cursor.getString(1),
+                            lang = cursor.getString(2),
+                            phonetic = cursor.getString(3),
+                            pos = cursor.getString(4),
+                            definition = cursor.getString(5) ?: "",
+                            timestamp = cursor.getLong(6)
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "getAllFavorites error: ${e.message}")
         }
         return list
     }
 
     fun addFavorite(entry: DictionaryEntry) {
-        val values = ContentValues().apply {
-            put("word", entry.word)
-            put("lang", entry.lang)
-            put("phonetic", entry.phonetic)
-            put("pos", entry.pos)
-            put("definition", entry.definition)
-            put("timestamp", System.currentTimeMillis())
+        try {
+            val values = ContentValues().apply {
+                put("word", entry.word)
+                put("lang", entry.lang)
+                put("phonetic", entry.phonetic)
+                put("pos", entry.pos)
+                put("definition", entry.definition)
+                put("timestamp", System.currentTimeMillis())
+            }
+            writableDb.insertWithOnConflict("user_favorites", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        } catch (e: Exception) {
+            Log.e(TAG, "addFavorite error: ${e.message}")
         }
-        writableDb.insertWithOnConflict("user_favorites", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     fun removeFavorite(word: String, lang: String) {
-        writableDb.delete("user_favorites", "word = ? AND lang = ?", arrayOf(word, lang))
+        try {
+            writableDb.delete("user_favorites", "word = ? AND lang = ?", arrayOf(word, lang))
+        } catch (e: Exception) {
+            Log.e(TAG, "removeFavorite error: ${e.message}")
+        }
     }
 
     fun isFavorite(word: String, lang: String): Boolean {
-        readableDb.rawQuery(
-            "SELECT 1 FROM user_favorites WHERE word = ? AND lang = ? LIMIT 1",
-            arrayOf(word, lang)
-        ).use { cursor ->
-            return cursor.moveToFirst()
+        return try {
+            readableDb.rawQuery(
+                "SELECT 1 FROM user_favorites WHERE word = ? AND lang = ? LIMIT 1",
+                arrayOf(word, lang)
+            ).use { cursor ->
+                cursor.moveToFirst()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "isFavorite error: ${e.message}")
+            false
         }
     }
 
@@ -197,64 +234,88 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
     fun addHistory(query: String, lang: String) {
         if (query.isBlank()) return
         val cleanQuery = query.trim()
-        writableDb.delete("user_history", "query = ?", arrayOf(cleanQuery))
-        val values = ContentValues().apply {
-            put("query", cleanQuery)
-            put("lang", lang)
-            put("timestamp", System.currentTimeMillis())
+        try {
+            writableDb.delete("user_history", "query = ?", arrayOf(cleanQuery))
+            val values = ContentValues().apply {
+                put("query", cleanQuery)
+                put("lang", lang)
+                put("timestamp", System.currentTimeMillis())
+            }
+            writableDb.insert("user_history", null, values)
+        } catch (e: Exception) {
+            Log.e(TAG, "addHistory error: ${e.message}")
         }
-        writableDb.insert("user_history", null, values)
     }
 
     fun getHistory(limit: Int = 50): List<HistoryItem> {
         val list = mutableListOf<HistoryItem>()
-        readableDb.rawQuery(
-            "SELECT id, query, lang, timestamp FROM user_history ORDER BY timestamp DESC LIMIT ?",
-            arrayOf(limit.toString())
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                list.add(
-                    HistoryItem(
-                        id = cursor.getLong(0),
-                        query = cursor.getString(1),
-                        lang = cursor.getString(2),
-                        timestamp = cursor.getLong(3)
+        try {
+            readableDb.rawQuery(
+                "SELECT id, query, lang, timestamp FROM user_history ORDER BY timestamp DESC LIMIT ?",
+                arrayOf(limit.toString())
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    list.add(
+                        HistoryItem(
+                            id = cursor.getLong(0),
+                            query = cursor.getString(1),
+                            lang = cursor.getString(2),
+                            timestamp = cursor.getLong(3)
+                        )
                     )
-                )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "getHistory error: ${e.message}")
         }
         return list
     }
 
     fun deleteHistoryItem(id: Long) {
-        writableDb.delete("user_history", "id = ?", arrayOf(id.toString()))
+        try {
+            writableDb.delete("user_history", "id = ?", arrayOf(id.toString()))
+        } catch (e: Exception) {
+            Log.e(TAG, "deleteHistoryItem error: ${e.message}")
+        }
     }
 
     fun clearAllHistory() {
-        writableDb.delete("user_history", null, null)
+        try {
+            writableDb.delete("user_history", null, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "clearAllHistory error: ${e.message}")
+        }
     }
 
     // ================= ONLINE CACHE =================
     fun getCachedOnlineResult(query: String, sourceLang: String, targetLang: String): String? {
-        readableDb.rawQuery(
-            "SELECT result_text FROM online_cache WHERE query = ? AND source_lang = ? AND target_lang = ? LIMIT 1",
-            arrayOf(query.lowercase().trim(), sourceLang, targetLang)
-        ).use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getString(0)
+        return try {
+            readableDb.rawQuery(
+                "SELECT result_text FROM online_cache WHERE query = ? AND source_lang = ? AND target_lang = ? LIMIT 1",
+                arrayOf(query.lowercase().trim(), sourceLang, targetLang)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else null
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "getCachedOnlineResult error: ${e.message}")
+            null
         }
-        return null
     }
 
     fun saveCachedOnlineResult(query: String, sourceLang: String, targetLang: String, resultText: String) {
-        val values = ContentValues().apply {
-            put("query", query.lowercase().trim())
-            put("source_lang", sourceLang)
-            put("target_lang", targetLang)
-            put("result_text", resultText)
-            put("timestamp", System.currentTimeMillis())
+        try {
+            val values = ContentValues().apply {
+                put("query", query.lowercase().trim())
+                put("source_lang", sourceLang)
+                put("target_lang", targetLang)
+                put("result_text", resultText)
+                put("timestamp", System.currentTimeMillis())
+            }
+            writableDb.insertWithOnConflict("online_cache", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        } catch (e: Exception) {
+            Log.e(TAG, "saveCachedOnlineResult error: ${e.message}")
         }
-        writableDb.insertWithOnConflict("online_cache", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 }

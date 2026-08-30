@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -33,6 +34,10 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: DictionaryRepository
     private var tts: TextToSpeech? = null
@@ -48,18 +53,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        try {
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
 
-        repository = (application as DictionaryApplication).repository
-        tts = TextToSpeech(this, this)
+            repository = (application as DictionaryApplication).repository
+            initTts()
 
-        setupRecyclerViews()
-        setupSearchInput()
-        setupModeChips()
-        setupBottomNavigation()
+            setupRecyclerViews()
+            setupSearchInput()
+            setupModeChips()
+            setupBottomNavigation()
 
-        handleIncomingIntent(intent)
+            handleIncomingIntent(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onCreate", e)
+        }
+    }
+
+    private fun initTts() {
+        try {
+            tts = TextToSpeech(applicationContext, this)
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS init error: ${e.message}")
+        }
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -68,13 +85,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun handleIncomingIntent(intent: Intent) {
-        if (Intent.ACTION_PROCESS_TEXT == intent.action && intent.type == "text/plain") {
-            val selectedText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
-            if (!selectedText.isNullOrBlank()) {
-                binding.etSearch.setText(selectedText)
-                binding.etSearch.setSelection(selectedText.length)
-                performSearch(selectedText)
+        try {
+            if (Intent.ACTION_PROCESS_TEXT == intent.action && intent.type == "text/plain") {
+                val selectedText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+                if (!selectedText.isNullOrBlank()) {
+                    binding.etSearch.setText(selectedText)
+                    binding.etSearch.setSelection(selectedText.length)
+                    performSearch(selectedText)
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling intent", e)
         }
     }
 
@@ -159,11 +180,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     suggestJob?.cancel()
                     suggestJob = lifecycleScope.launch {
                         delay(150)
-                        val suggestions = repository.getSuggestions(query)
-                        if (suggestions.isNotEmpty() && binding.panelSearch.isVisible) {
-                            suggestionAdapter.submitList(suggestions)
-                            binding.rvSuggestions.visibility = View.VISIBLE
-                        } else {
+                        try {
+                            val suggestions = repository.getSuggestions(query)
+                            if (suggestions.isNotEmpty() && binding.panelSearch.isVisible) {
+                                suggestionAdapter.submitList(suggestions)
+                                binding.rvSuggestions.visibility = View.VISIBLE
+                            } else {
+                                hideSuggestions()
+                            }
+                        } catch (e: Exception) {
                             hideSuggestions()
                         }
                     }
@@ -199,14 +224,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun setupModeChips() {
         binding.chipGroupMode.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (checkedIds.isEmpty()) {
-                binding.chipAuto.isChecked = true
-                return@setOnCheckedStateChangeListener
-            }
-            currentMode = when (checkedIds.first()) {
-                R.id.chipZhToEn -> SearchMode.ZH_TO_EN
-                R.id.chipZhToMs -> SearchMode.ZH_TO_MS
-                else -> SearchMode.AUTO_DETECT
+            currentMode = when {
+                checkedIds.contains(binding.chipZhToEn.id) -> SearchMode.ZH_TO_EN
+                checkedIds.contains(binding.chipZhToMs.id) -> SearchMode.ZH_TO_MS
+                else -> {
+                    if (checkedIds.isEmpty()) binding.chipAuto.isChecked = true
+                    SearchMode.AUTO_DETECT
+                }
             }
 
             val query = binding.etSearch.text.toString().trim()
@@ -259,66 +283,93 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun performSearch(query: String) {
         searchJob?.cancel()
         searchJob = lifecycleScope.launch {
-            binding.progressBar.visibility = View.VISIBLE
-            binding.layoutEmptySearch.visibility = View.GONE
-
-            val results = repository.lookup(query, currentMode)
-            binding.progressBar.visibility = View.GONE
-
-            if (results.isNotEmpty()) {
-                wordAdapter.submitList(results)
+            try {
+                binding.progressBar.visibility = View.VISIBLE
                 binding.layoutEmptySearch.visibility = View.GONE
-            } else {
-                wordAdapter.submitList(emptyList())
+
+                val results = repository.lookup(query, currentMode)
+                binding.progressBar.visibility = View.GONE
+
+                if (results.isNotEmpty()) {
+                    wordAdapter.submitList(results)
+                    binding.layoutEmptySearch.visibility = View.GONE
+                } else {
+                    wordAdapter.submitList(emptyList())
+                    binding.layoutEmptySearch.visibility = View.VISIBLE
+                    binding.tvEmptyTitle.text = getString(R.string.no_results)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Search execution error", e)
+                binding.progressBar.visibility = View.GONE
                 binding.layoutEmptySearch.visibility = View.VISIBLE
-                binding.tvEmptyTitle.text = getString(R.string.no_results)
+                binding.tvEmptyTitle.text = "查询失败，请重试"
             }
         }
     }
 
     private fun loadFavorites() {
         lifecycleScope.launch {
-            val list = repository.getFavorites()
-            favoriteAdapter.submitList(list)
-            binding.tvEmptyFavorites.isVisible = list.isEmpty()
+            try {
+                val list = repository.getFavorites()
+                favoriteAdapter.submitList(list)
+                binding.tvEmptyFavorites.isVisible = list.isEmpty()
+            } catch (e: Exception) {
+                Log.e(TAG, "loadFavorites error", e)
+            }
         }
     }
 
     private fun loadHistory() {
         lifecycleScope.launch {
-            val list = repository.getHistory()
-            historyAdapter.submitList(list)
-            binding.tvEmptyHistory.isVisible = list.isEmpty()
+            try {
+                val list = repository.getHistory()
+                historyAdapter.submitList(list)
+                binding.tvEmptyHistory.isVisible = list.isEmpty()
+            } catch (e: Exception) {
+                Log.e(TAG, "loadHistory error", e)
+            }
         }
     }
 
     private fun toggleFavorite(entry: DictionaryEntry, pos: Int) {
         lifecycleScope.launch {
-            val newState = repository.toggleFavorite(entry)
-            entry.isFavorite = newState
-            wordAdapter.notifyItemChanged(pos)
-            val msg = if (newState) getString(R.string.added_to_favorites) else getString(R.string.removed_from_favorites)
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            try {
+                val newState = repository.toggleFavorite(entry)
+                entry.isFavorite = newState
+                wordAdapter.notifyItemChanged(pos)
+                val msg = if (newState) getString(R.string.added_to_favorites) else getString(R.string.removed_from_favorites)
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e(TAG, "toggleFavorite error", e)
+            }
         }
     }
 
     private fun copyDefinition(entry: DictionaryEntry) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = "${entry.displayWord}\n${entry.definition}"
-        val clip = ClipData.newPlainText("Dictionary Word", text)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = "${entry.displayWord}\n${entry.definition}"
+            val clip = ClipData.newPlainText("Dictionary Word", text)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "copy error", e)
+        }
     }
 
     private fun speakWord(entry: DictionaryEntry) {
-        tts?.let { player ->
-            val lang = when (entry.lang.lowercase()) {
-                "ms" -> Locale("ms", "MY")
-                "zh" -> Locale.CHINESE
-                else -> Locale.US
+        try {
+            tts?.let { player ->
+                val lang = when (entry.lang.lowercase()) {
+                    "ms" -> Locale("ms", "MY")
+                    "zh" -> Locale.CHINESE
+                    else -> Locale.US
+                }
+                player.language = lang
+                player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
             }
-            player.language = lang
-            player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
+        } catch (e: Exception) {
+            Log.e(TAG, "TTS speak error", e)
         }
     }
 
@@ -327,19 +378,31 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(binding.etSearch.windowToken, 0)
+        try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.hideSoftInputFromWindow(binding.etSearch.windowToken, 0)
+        } catch (e: Exception) {
+            Log.w(TAG, "hideKeyboard error: ${e.message}")
+        }
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.US
+        try {
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.US
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS onInit error: ${e.message}")
         }
     }
 
     override fun onDestroy() {
-        tts?.stop()
-        tts?.shutdown()
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS destroy error: ${e.message}")
+        }
         super.onDestroy()
     }
 }

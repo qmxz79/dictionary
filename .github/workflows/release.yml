@@ -37,9 +37,10 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Rename APK
+      - name: Prepare Release APK Asset
         run: |
-          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/BilingualDictionary-v1.0.0.apk
+          TAG_NAME="${{ github.ref_name }}"
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/BilingualDictionary-${TAG_NAME}.apk
 
       - name: Upload Release Assets to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -47,18 +48,20 @@ jobs:
         with:
           name: Release ${{ github.ref_name }}
           body: |
-            ### 🚀 双语字典 (Bilingual Dictionary) Android v1.0.0 发布
+            ### 🚀 双语字典 (Bilingual Dictionary) Android ${{ github.ref_name }} 发布
 
-            #### ✨ 主要特性
+            #### ✨ 本次更新
+            - 🎨 **全新高颜值设计 App 图标** (多语智能辞典质感图标)
+            - 🛡️ **修复真机启动与点击退出问题** (完善 ProGuard 混淆规则、优化 assets 数据库原子级解压与异常防护)
             - ⚡ **智能双语自动识别** (英语 / 马来语 -> 中文)
             - 🔄 **中文双向互译** (中 -> 英 / 马)
-            - 🇲🇾 **内置马来语形态词缀还原引擎** (自动剥离前缀、后缀并推导词根)
+            - 🇲🇾 **内置马来语形态词缀还原引擎**
             - 🌐 **离线优先 + 智能网络兜底** (内置 76,000+ 离线词条，查词自动缓存)
             - 📱 **TTS 原生发音、生词本收藏、查词历史、系统划词查词**
             
             #### 📦 下载安装
-            直接下载下方的 `BilingualDictionary-v1.0.0.apk` 安装到安卓手机即可使用。
+            直接下载下方的 `BilingualDictionary-${{ github.ref_name }}.apk` 安装到安卓手机即可使用。
           files: |
-            app/build/outputs/apk/release/BilingualDictionary-v1.0.0.apk
+            app/build/outputs/apk/release/BilingualDictionary-*.apk
           draft: false
           prerelease: false
