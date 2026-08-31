@@ -187,7 +187,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun handleGraphicClick(graphic: OcrGraphic) {
         lifecycleScope.launch {
             val entry = graphic.dictionaryEntry ?: run {
-                val results = repository.lookup(graphic.originalText, SearchMode.AUTO_DETECT, offlineOnly = true)
+                val results = repository.lookup(graphic.originalText, SearchMode.AUTO_DETECT, offlineOnly = false)
                 results.firstOrNull() ?: DictionaryEntry(
                     id = 0,
                     word = graphic.originalText,
@@ -380,7 +380,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     if (rawText.length < 2) continue
 
                     val box = line.boundingBox ?: continue
-                    val (translation, entry) = ocrTranslator.translateText(rawText)
+                    val (translation, entry) = ocrTranslator.translateText(rawText, allowOnline = true)
 
                     if (translation.isNotEmpty() && translation != rawText) {
                         graphics.add(

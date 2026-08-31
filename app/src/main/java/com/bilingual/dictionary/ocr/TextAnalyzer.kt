@@ -100,7 +100,7 @@ class TextAnalyzer(
                         if (rawText.length < 2) continue
 
                         val box = line.boundingBox ?: continue
-                        val (translation, entry) = translator.translateText(rawText)
+                        val (translation, entry) = translator.translateText(rawText, allowOnline = false)
 
                         if (translation.isNotEmpty() && translation != rawText) {
                             graphics.add(

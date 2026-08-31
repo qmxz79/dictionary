@@ -19,21 +19,23 @@ class OcrGraphic(
     private var drawRect: RectF = RectF()
 
     private val bgPaint = Paint().apply {
-        // Semi-transparent frosted dark slate (~75% opacity)
-        color = Color.argb(190, 15, 23, 42)
+        // Light frosted white bubble with increased transparency (~50% opacity)
+        color = Color.argb(130, 255, 255, 255)
         style = Paint.Style.FILL
         isAntiAlias = true
     }
 
     private val strokePaint = Paint().apply {
-        color = Color.argb(220, 56, 189, 248) // Sky Blue subtle accent border
+        // Subtle frosted glass border
+        color = Color.argb(160, 203, 213, 225)
         style = Paint.Style.STROKE
-        strokeWidth = 2f
+        strokeWidth = 1.5f
         isAntiAlias = true
     }
 
     private val textTransPaint = Paint().apply {
-        color = Color.WHITE
+        // Crisp deep black text for high contrast and readability on light frosted bg
+        color = Color.parseColor("#0F172A")
         isFakeBoldText = true
         isAntiAlias = true
     }
@@ -44,7 +46,7 @@ class OcrGraphic(
 
     /**
      * Draws the translated text directly over the original text bounding box
-     * in a clean, semi-transparent frosted bubble without blocking surrounding content.
+     * in a light, high-transparency frosted bubble with black text.
      */
     fun draw(canvas: Canvas, overlay: GraphicOverlay) {
         val screenRect = overlay.mapRect(boundingBox)
@@ -52,12 +54,12 @@ class OcrGraphic(
         // Guard: if overlay dimensions are not ready, skip
         if (screenRect.width() <= 0f && screenRect.height() <= 0f) return
 
-        // Auto-scale font size to fit within original line height
-        val fontSize = max(20f, (screenRect.height() * 0.72f).coerceAtMost(38f))
+        // Auto-scale font size to fit comfortably within original line height
+        val fontSize = max(18f, (screenRect.height() * 0.72f).coerceAtMost(36f))
         textTransPaint.textSize = fontSize
 
         val textWidth = textTransPaint.measureText(translation)
-        val paddingH = 10f
+        val paddingH = 8f
         val paddingV = 4f
 
         val targetWidth = max(screenRect.width(), textWidth + paddingH * 2)
@@ -73,11 +75,11 @@ class OcrGraphic(
 
         drawRect.set(left, top, right, bottom)
 
-        // Draw translucent rounded bubble directly over original text
-        canvas.drawRoundRect(drawRect, 8f, 8f, bgPaint)
-        canvas.drawRoundRect(drawRect, 8f, 8f, strokePaint)
+        // Draw light semi-transparent frosted rounded bubble
+        canvas.drawRoundRect(drawRect, 6f, 6f, bgPaint)
+        canvas.drawRoundRect(drawRect, 6f, 6f, strokePaint)
 
-        // Center translated text vertically and horizontally
+        // Center translated black text vertically and horizontally
         val fontMetrics = textTransPaint.fontMetrics
         val textY = centerY - (fontMetrics.ascent + fontMetrics.descent) / 2f
         val textX = left + paddingH

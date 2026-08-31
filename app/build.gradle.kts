@@ -16,16 +16,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters.clear()
-            abiFilters.add("arm64-v8a")
-        }
-
         resourceConfigurations.addAll(listOf("zh", "en", "ms", "zh-rCN", "zh-rTW", "zh-rHK"))
+
+        ndk {
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
+        }
     }
 
     androidResources {
-        noCompress.addAll(listOf("gz", "db"))
+        noCompress.addAll(listOf("gz", "db", "bin"))
     }
 
     signingConfigs {
@@ -88,7 +87,7 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
     // Google ML Kit Offline Text Recognition (Latin & Chinese)
-    implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

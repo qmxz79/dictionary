@@ -38,8 +38,14 @@ class DatabaseHelper private constructor(private val context: Context) :
     private val dbFile: File
         get() = context.getDatabasePath(DB_NAME)
 
-    init {
+    override fun getReadableDatabase(): SQLiteDatabase {
         ensureDatabaseExists()
+        return super.getReadableDatabase()
+    }
+
+    override fun getWritableDatabase(): SQLiteDatabase {
+        ensureDatabaseExists()
+        return super.getWritableDatabase()
     }
 
     @Synchronized

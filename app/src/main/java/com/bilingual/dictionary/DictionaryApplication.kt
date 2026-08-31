@@ -5,6 +5,9 @@ import android.util.Log
 import com.bilingual.dictionary.data.db.DatabaseHelper
 import com.bilingual.dictionary.data.db.DictionaryDao
 import com.bilingual.dictionary.data.repository.DictionaryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class DictionaryApplication : Application() {
 
@@ -32,6 +35,9 @@ class DictionaryApplication : Application() {
             val dbHelper = DatabaseHelper.getInstance(this)
             val dao = DictionaryDao(dbHelper)
             repository = DictionaryRepository(dao)
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                dbHelper.ensureDatabaseExists()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing repository in application", e)
         }
