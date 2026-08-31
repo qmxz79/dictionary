@@ -58,6 +58,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var suggestJob: Job? = null
     private var lastHandledClip: String = ""
 
+    private val cameraLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val selectedWord = result.data?.getStringExtra(CameraActivity.EXTRA_SELECTED_WORD)
+                if (!selectedWord.isNullOrBlank()) {
+                    binding.bottomNav.selectedItemId = R.id.nav_search
+                    binding.etSearch.setText(selectedWord)
+                    binding.etSearch.setSelection(selectedWord.length)
+                    performSearch(selectedWord)
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -74,6 +87,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setupBottomNavigation()
             setupSettingsButton()
             setupClipboardBanner()
+            setupCameraButton()
 
             handleIncomingIntent(intent)
         } catch (e: Exception) {
@@ -94,9 +108,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent?.let { handleIncomingIntent(it) }
+        handleIncomingIntent(intent)
     }
 
     private fun handleIncomingIntent(intent: Intent) {
@@ -323,6 +337,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 wordAdapter.notifyDataSetChanged()
             }
             sheet.show(supportFragmentManager, SettingsBottomSheet.TAG)
+        }
+    }
+
+    private fun setupCameraButton() {
+        binding.btnCamera.setOnClickListener {
+            hideSuggestions()
+            hideKeyboard()
+            val intent = Intent(this, CameraActivity::class.java)
+            cameraLauncher.launch(intent)
         }
     }
 
