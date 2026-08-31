@@ -47,7 +47,7 @@ object OnlineTranslationService {
                 }
                 reader.close()
 
-                parseMyMemoryResponse(sb.toString())
+                parseMyMemoryResponse(sb.toString(), trimmed)
             } else {
                 Log.w(TAG, "Server returned response code: $responseCode")
                 null
@@ -60,34 +60,56 @@ object OnlineTranslationService {
         }
     }
 
-    private fun parseMyMemoryResponse(jsonStr: String): String? {
+    private fun parseMyMemoryResponse(jsonStr: String, originalQuery: String): String? {
         return try {
             val root = JSONObject(jsonStr)
+            val responseStatus = root.optInt("responseStatus", 200)
+            if (responseStatus != 200) {
+                Log.w(TAG, "MyMemory responseStatus not 200: $responseStatus")
+                return null
+            }
+
             val responseData = root.optJSONObject("responseData")
-            val translatedText = responseData?.optString("translatedText")
+            val translatedText = responseData?.optString("translatedText")?.trim()
 
-            if (!translatedText.isNullOrEmpty() && !translatedText.contains("MYMEMORY WARNING")) {
-                // Also check matches if available to extract richer translations
-                val matches = root.optJSONArray("matches")
-                val cleanTranslations = mutableListOf<String>()
-                cleanTranslations.add(translatedText.trim())
+            if (translatedText.isNullOrEmpty() || isInvalidTranslation(translatedText, originalQuery)) {
+                return null
+            }
 
-                if (matches != null) {
-                    for (i in 0 until minOf(matches.length(), 4)) {
-                        val matchObj = matches.getJSONObject(i)
-                        val trans = matchObj.optString("translation")?.trim()
-                        if (!trans.isNullOrEmpty() && !cleanTranslations.contains(trans) && !trans.contains("MYMEMORY")) {
-                            cleanTranslations.add(trans)
-                        }
+            val cleanTranslations = mutableListOf<String>()
+            cleanTranslations.add(translatedText)
+
+            val matches = root.optJSONArray("matches")
+            if (matches != null) {
+                for (i in 0 until minOf(matches.length(), 4)) {
+                    val matchObj = matches.getJSONObject(i)
+                    val trans = matchObj.optString("translation").trim()
+                    if (!trans.isNullOrEmpty()
+                        && !cleanTranslations.contains(trans)
+                        && !isInvalidTranslation(trans, originalQuery)
+                    ) {
+                        cleanTranslations.add(trans)
                     }
                 }
-                cleanTranslations.joinToString("\n• ")
-            } else {
-                null
             }
+
+            cleanTranslations.joinToString("\n• ")
         } catch (e: Exception) {
             Log.e(TAG, "JSON parse error", e)
             null
         }
+    }
+
+    private fun isInvalidTranslation(text: String, originalQuery: String): Boolean {
+        val upper = text.uppercase()
+        return upper.contains("MYMEMORY WARNING") ||
+                upper.contains("INVALID SOURCE LANGUAGE") ||
+                upper.contains("INVALID TARGET LANGUAGE") ||
+                upper.contains("NO QUERY SPECIFIED") ||
+                upper.contains("IS AN INVALID") ||
+                upper.contains("PLEASE SPECIFY A VALID") ||
+                upper.contains("QUERY LENGTH LIMIT EXCEEDED") ||
+                upper.contains("YOU HAVE USED ALL YOUR FREE CREDITS") ||
+                (text.equals(originalQuery, ignoreCase = true) && text.length > 3)
     }
 }

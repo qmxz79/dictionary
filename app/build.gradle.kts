@@ -17,8 +17,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            abiFilters.clear()
+            abiFilters.add("arm64-v8a")
         }
+
+        resourceConfigurations.addAll(listOf("zh", "en", "ms", "zh-rCN", "zh-rTW", "zh-rHK"))
     }
 
     androidResources {

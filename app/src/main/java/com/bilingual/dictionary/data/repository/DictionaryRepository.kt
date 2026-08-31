@@ -1,5 +1,6 @@
 package com.bilingual.dictionary.data.repository
 
+import com.bilingual.dictionary.core.LanguageDetector
 import com.bilingual.dictionary.core.MalayStemmer
 import com.bilingual.dictionary.data.db.DictionaryDao
 import com.bilingual.dictionary.data.model.DictionaryEntry
@@ -10,23 +11,21 @@ import com.bilingual.dictionary.data.model.SuggestionItem
 import com.bilingual.dictionary.data.network.OnlineTranslationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.regex.Pattern
 
 class DictionaryRepository(private val dao: DictionaryDao) {
-
-    private val chinesePattern = Pattern.compile("[\\u4e00-\\u9fa5]")
 
     /**
      * Determines if text contains Chinese characters.
      */
     fun isChinese(text: String): Boolean {
-        return chinesePattern.matcher(text).find()
+        return LanguageDetector.isChinese(text)
     }
 
     /**
      * Main lookup routine.
+     * @param offlineOnly If true, skip online translation fallback and history recording (for OCR use).
      */
-    suspend fun lookup(query: String, mode: SearchMode): List<DictionaryEntry> = withContext(Dispatchers.IO) {
+    suspend fun lookup(query: String, mode: SearchMode, offlineOnly: Boolean = false): List<DictionaryEntry> = withContext(Dispatchers.IO) {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return@withContext emptyList()
 
@@ -43,8 +42,10 @@ class DictionaryRepository(private val dao: DictionaryDao) {
             val localList = dao.searchReverseChinese(trimmed, targetLang)
             results.addAll(localList)
 
-            // Save history
-            dao.addHistory(trimmed, if (mode == SearchMode.ZH_TO_MS) "zh->ms" else "zh->en")
+            // Save history (skip for OCR)
+            if (!offlineOnly) {
+                dao.addHistory(trimmed, if (mode == SearchMode.ZH_TO_MS) "zh->ms" else "zh->en")
+            }
         } else {
             // Latin search (Auto detect: search both EN and MS)
             val enMatches = dao.searchExact(trimmed, "en")
@@ -72,12 +73,14 @@ class DictionaryRepository(private val dao: DictionaryDao) {
                 }
             }
 
-            // Save history
-            dao.addHistory(trimmed, "auto")
+            // Save history (skip for OCR)
+            if (!offlineOnly) {
+                dao.addHistory(trimmed, "auto")
+            }
         }
 
-        // If offline search returned NO results, trigger Online Fallback!
-        if (results.isEmpty()) {
+        // If offline search returned NO results, trigger Online Fallback (skip for OCR)
+        if (results.isEmpty() && !offlineOnly) {
             val fallbackEntry = performOnlineFallback(trimmed, mode, containsZh)
             if (fallbackEntry != null) {
                 results.add(fallbackEntry)
@@ -88,15 +91,29 @@ class DictionaryRepository(private val dao: DictionaryDao) {
     }
 
     /**
-     * Online fallback with local caching.
+     * Online fallback with local caching and smart language detection.
      */
     private fun performOnlineFallback(query: String, mode: SearchMode, containsZh: Boolean): DictionaryEntry? {
-        val (srcLang, tgtLang) = when {
-            containsZh && mode == SearchMode.ZH_TO_MS -> Pair("zh", "ms")
-            containsZh -> Pair("zh", "en")
-            else -> Pair("auto", "zh")
+        if (containsZh) {
+            val tgtLang = if (mode == SearchMode.ZH_TO_MS) "ms" else "en"
+            return queryOnlineWithCache(query, "zh", tgtLang)
         }
 
+        // Latin input: Smart detection between Malay (ms) and English (en)
+        val primarySrcLang = LanguageDetector.detectLatinLanguage(query)
+        val secondarySrcLang = if (primarySrcLang == "ms") "en" else "ms"
+
+        // 1. Try detected primary language first
+        val primaryResult = queryOnlineWithCache(query, primarySrcLang, "zh")
+        if (primaryResult != null) {
+            return primaryResult
+        }
+
+        // 2. If primary language failed, fallback to secondary Latin language
+        return queryOnlineWithCache(query, secondarySrcLang, "zh")
+    }
+
+    private fun queryOnlineWithCache(query: String, srcLang: String, tgtLang: String): DictionaryEntry? {
         // 1. Check local cache first
         val cached = dao.getCachedOnlineResult(query, srcLang, tgtLang)
         if (!cached.isNullOrEmpty()) {

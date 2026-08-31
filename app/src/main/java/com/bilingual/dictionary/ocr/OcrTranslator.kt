@@ -28,8 +28,8 @@ class OcrTranslator(private val repository: DictionaryRepository) {
         translationCache[key]?.let { return@withContext it }
 
         try {
-            // Try exact lookup
-            val entries = repository.lookup(cleanText, SearchMode.AUTO_DETECT)
+            // Try exact lookup (offline only — no online fallback for OCR)
+            val entries = repository.lookup(cleanText, SearchMode.AUTO_DETECT, offlineOnly = true)
             if (entries.isNotEmpty()) {
                 val bestEntry = entries[0]
                 val briefDef = extractBriefDefinition(bestEntry.definition)
@@ -42,7 +42,7 @@ class OcrTranslator(private val repository: DictionaryRepository) {
             if (cleanText.contains(" ")) {
                 val words = cleanText.split(" ").filter { it.length >= 2 }
                 for (word in words) {
-                    val subEntries = repository.lookup(word, SearchMode.AUTO_DETECT)
+                    val subEntries = repository.lookup(word, SearchMode.AUTO_DETECT, offlineOnly = true)
                     if (subEntries.isNotEmpty()) {
                         val bestSub = subEntries[0]
                         val briefDef = "${word}: ${extractBriefDefinition(bestSub.definition)}"
