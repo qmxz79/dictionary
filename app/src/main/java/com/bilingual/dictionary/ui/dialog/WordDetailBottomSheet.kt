@@ -37,7 +37,12 @@ class WordDetailBottomSheet : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val currentEntry = entry ?: return
+        val currentEntry = entry
+        if (currentEntry == null) {
+            // Entry lost after config change — dismiss gracefully
+            dismissAllowingStateLoss()
+            return
+        }
 
         val context = requireContext()
 

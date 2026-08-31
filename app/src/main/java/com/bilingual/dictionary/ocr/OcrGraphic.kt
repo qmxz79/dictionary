@@ -15,7 +15,8 @@ class OcrGraphic(
     val boundingBox: Rect,
     val dictionaryEntry: DictionaryEntry? = null
 ) {
-    private val screenRect: RectF = overlay.mapRect(boundingBox)
+    // drawRect is computed at draw-time so coordinate transforms are always current
+    private var drawRect: RectF = RectF()
 
     private val bgPaint = Paint().apply {
         color = Color.parseColor("#E61E293B") // Deep slate dark translucent
@@ -32,32 +33,47 @@ class OcrGraphic(
 
     private val textOriginalPaint = Paint().apply {
         color = Color.WHITE
-        textSize = max(24f, screenRect.height() * 0.42f).coerceAtMost(36f)
         isFakeBoldText = true
         isAntiAlias = true
     }
 
     private val textTransPaint = Paint().apply {
         color = Color.parseColor("#38BDF8") // Sky Blue for translation
-        textSize = max(22f, screenRect.height() * 0.38f).coerceAtMost(34f)
         isAntiAlias = true
     }
 
-    private var drawRect: RectF = RectF()
-
     fun contains(x: Float, y: Float): Boolean {
-        return drawRect.contains(x, y) || screenRect.contains(x, y)
+        return drawRect.contains(x, y)
     }
 
-    fun draw(canvas: Canvas) {
+    /**
+     * Draw is called from GraphicOverlay.onDraw(). The overlay is passed so we
+     * can call mapRect with the latest transformation matrix every frame,
+     * preventing stale coordinates when the overlay hasn't been laid out yet
+     * at OcrGraphic construction time.
+     */
+    fun draw(canvas: Canvas, overlay: GraphicOverlay) {
+        val screenRect = overlay.mapRect(boundingBox)
+
+        // Guard: if overlay dimensions are 0 the matrix produces (0,0,0,0) — skip
+        if (screenRect.width() <= 0f && screenRect.height() <= 0f) return
+
+        // Compute text sizes dynamically based on mapped rect height
+        textOriginalPaint.textSize = max(24f, screenRect.height() * 0.42f).coerceAtMost(36f)
+        textTransPaint.textSize = max(22f, screenRect.height() * 0.38f).coerceAtMost(34f)
+
+        val paddingH = 16f
+        val paddingV = 10f
+
         val origWidth = textOriginalPaint.measureText(originalText)
         val transWidth = textTransPaint.measureText(translation)
         val maxTextWidth = max(origWidth, transWidth)
 
-        val paddingH = 16f
-        val paddingV = 10f
         val totalWidth = max(screenRect.width(), maxTextWidth + paddingH * 2)
-        val totalHeight = max(screenRect.height(), (textOriginalPaint.textSize + textTransPaint.textSize + paddingV * 2.5f))
+        val totalHeight = max(
+            screenRect.height(),
+            textOriginalPaint.textSize + textTransPaint.textSize + paddingV * 2.5f
+        )
 
         val left = screenRect.left
         val top = screenRect.top

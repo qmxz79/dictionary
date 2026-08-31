@@ -1,5 +1,6 @@
 package com.bilingual.dictionary.ocr
 
+import android.util.Log
 import com.bilingual.dictionary.data.model.DictionaryEntry
 import com.bilingual.dictionary.data.model.SearchMode
 import com.bilingual.dictionary.data.repository.DictionaryRepository
@@ -8,6 +9,10 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 class OcrTranslator(private val repository: DictionaryRepository) {
+
+    companion object {
+        private const val TAG = "OcrTranslator"
+    }
 
     // Fast in-memory cache for OCR lookups
     private val translationCache = ConcurrentHashMap<String, Pair<String, DictionaryEntry?>>()
@@ -22,29 +27,37 @@ class OcrTranslator(private val repository: DictionaryRepository) {
         val key = cleanText.lowercase()
         translationCache[key]?.let { return@withContext it }
 
-        val entries = repository.lookup(cleanText, SearchMode.AUTO_DETECT)
-        if (entries.isNotEmpty()) {
-            val bestEntry = entries[0]
-            val briefDef = extractBriefDefinition(bestEntry.definition)
-            val result = Pair(briefDef, bestEntry)
-            translationCache[key] = result
-            return@withContext result
-        }
-
-        // If not found in full string, try first word if multi-word
-        if (cleanText.contains(" ")) {
-            val firstWord = cleanText.split(" ")[0]
-            val subEntries = repository.lookup(firstWord, SearchMode.AUTO_DETECT)
-            if (subEntries.isNotEmpty()) {
-                val bestSub = subEntries[0]
-                val briefDef = "${firstWord}: ${extractBriefDefinition(bestSub.definition)}"
-                val result = Pair(briefDef, bestSub)
+        try {
+            // Try exact lookup
+            val entries = repository.lookup(cleanText, SearchMode.AUTO_DETECT)
+            if (entries.isNotEmpty()) {
+                val bestEntry = entries[0]
+                val briefDef = extractBriefDefinition(bestEntry.definition)
+                val result = Pair(briefDef, bestEntry)
                 translationCache[key] = result
                 return@withContext result
             }
+
+            // If multi-word, try each word individually
+            if (cleanText.contains(" ")) {
+                val words = cleanText.split(" ").filter { it.length >= 2 }
+                for (word in words) {
+                    val subEntries = repository.lookup(word, SearchMode.AUTO_DETECT)
+                    if (subEntries.isNotEmpty()) {
+                        val bestSub = subEntries[0]
+                        val briefDef = "${word}: ${extractBriefDefinition(bestSub.definition)}"
+                        val result = Pair(briefDef, bestSub)
+                        translationCache[key] = result
+                        return@withContext result
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "translateText error for '$cleanText': ${e.message}")
         }
 
-        val emptyResult = Pair(cleanText, null)
+        // No match found — return empty translation so it won't be displayed
+        val emptyResult = Pair("", null)
         translationCache[key] = emptyResult
         emptyResult
     }

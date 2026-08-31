@@ -59,16 +59,16 @@ class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, att
         val viewAspectRatio = width.toFloat() / height.toFloat()
         val imageAspectRatio = imageWidth.toFloat() / imageHeight.toFloat()
 
-        var scale: Float
+        val scale: Float
         var dx = 0f
         var dy = 0f
 
         if (viewAspectRatio > imageAspectRatio) {
-            // View is wider than image
+            // View is wider than image — scale to fill width
             scale = width.toFloat() / imageWidth.toFloat()
             dy = (height - imageHeight * scale) / 2f
         } else {
-            // View is taller than image
+            // View is taller than image — scale to fill height
             scale = height.toFloat() / imageHeight.toFloat()
             dx = (width - imageWidth * scale) / 2f
         }
@@ -96,24 +96,33 @@ class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, att
         super.onDraw(canvas)
         synchronized(lock) {
             for (graphic in graphics) {
-                graphic.draw(canvas)
+                graphic.draw(canvas, this)
             }
         }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_UP) {
-            val x = event.x
-            val y = event.y
-            synchronized(lock) {
-                for (graphic in graphics.reversed()) {
-                    if (graphic.contains(x, y)) {
-                        onGraphicClickListener?.invoke(graphic)
-                        return true
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> return true // Consume to receive ACTION_UP
+            MotionEvent.ACTION_UP -> {
+                val x = event.x
+                val y = event.y
+                synchronized(lock) {
+                    for (graphic in graphics.reversed()) {
+                        if (graphic.contains(x, y)) {
+                            performClick()
+                            onGraphicClickListener?.invoke(graphic)
+                            return true
+                        }
                     }
                 }
+                performClick()
             }
         }
-        return true
+        return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        return super.performClick()
     }
 }

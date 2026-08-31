@@ -163,21 +163,23 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun updateModeUI() {
         binding.graphicOverlay.clear()
+        ocrTranslator.clearCache()
+        // Always reset back to live preview when switching modes
+        binding.ivCapturedPhoto.visibility = View.GONE
+        binding.previewView.visibility = View.VISIBLE
+        binding.btnRetake.visibility = View.GONE
+
         if (isLiveMode) {
             binding.tvCameraTitle.text = "实时取景 AR 翻译"
             binding.tvLiveHint.visibility = View.VISIBLE
             binding.tvLiveHint.text = "将镜头对准英语或马来语单词，点击浮框可查详细释义"
             binding.btnShutter.visibility = View.GONE
-            binding.btnRetake.visibility = View.GONE
             binding.btnGallery.visibility = View.VISIBLE
-            binding.ivCapturedPhoto.visibility = View.GONE
-            binding.previewView.visibility = View.VISIBLE
         } else {
             binding.tvCameraTitle.text = "拍照 / 相册翻译"
             binding.tvLiveHint.visibility = View.VISIBLE
             binding.tvLiveHint.text = "按下快门拍照或从相册选图，即可提取全文翻译"
             binding.btnShutter.visibility = View.VISIBLE
-            binding.btnRetake.visibility = View.GONE
             binding.btnGallery.visibility = View.VISIBLE
         }
     }
@@ -409,6 +411,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val bytes = ByteArray(buffer.remaining())
             buffer.get(bytes)
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: return null
 
             val rotation = image.imageInfo.rotationDegrees
             if (rotation != 0) {
