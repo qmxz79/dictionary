@@ -22,12 +22,15 @@ import com.bilingual.dictionary.DictionaryApplication
 import com.bilingual.dictionary.R
 import com.bilingual.dictionary.data.model.DictionaryEntry
 import com.bilingual.dictionary.data.model.SearchMode
+import com.bilingual.dictionary.data.pref.AppPreferences
 import com.bilingual.dictionary.data.repository.DictionaryRepository
 import com.bilingual.dictionary.databinding.ActivityMainBinding
 import com.bilingual.dictionary.ui.adapter.FavoriteAdapter
 import com.bilingual.dictionary.ui.adapter.HistoryAdapter
 import com.bilingual.dictionary.ui.adapter.SuggestionAdapter
 import com.bilingual.dictionary.ui.adapter.WordCardAdapter
+import com.bilingual.dictionary.ui.dialog.SettingsBottomSheet
+import com.google.android.material.chip.Chip
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -41,6 +44,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: DictionaryRepository
+    private lateinit var appPrefs: AppPreferences
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
 
@@ -52,10 +56,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var currentMode = SearchMode.AUTO_DETECT
     private var searchJob: Job? = null
     private var suggestJob: Job? = null
+    private var lastHandledClip: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            appPrefs = AppPreferences(this)
             binding = ActivityMainBinding.inflate(layoutInflater)
             setContentView(binding.root)
 
@@ -66,11 +72,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setupSearchInput()
             setupModeChips()
             setupBottomNavigation()
+            setupSettingsButton()
+            setupClipboardBanner()
 
             handleIncomingIntent(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkClipboard()
     }
 
     private fun initTts() {
@@ -102,11 +115,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun setupRecyclerViews() {
-        // 1. Word Card Adapter
+        // 1. Word Card Adapter with dynamic font size from AppPreferences
         wordAdapter = WordCardAdapter(
             onSpeakClick = { entry -> speakWord(entry) },
             onFavoriteClick = { entry, pos -> toggleFavorite(entry, pos) },
-            onCopyClick = { entry -> copyDefinition(entry) }
+            onCopyClick = { entry -> copyDefinition(entry) },
+            fontSizeSp = appPrefs.getDefinitionTextSizeSp()
         )
         binding.rvResults.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
@@ -170,7 +184,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 lifecycleScope.launch {
                     repository.removeFavorite(favItem.word, favItem.lang)
                     loadFavorites()
-                    // If currently displaying this word in search, update it
                     wordAdapter.currentList.find { it.word == favItem.word && it.lang == favItem.lang }?.let {
                         it.isFavorite = false
                         wordAdapter.notifyDataSetChanged()
@@ -232,6 +245,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             suggestJob?.cancel()
             binding.etSearch.text.clear()
             wordAdapter.submitList(emptyList())
+            binding.cardSpellCheck.visibility = View.GONE
             binding.layoutEmptySearch.visibility = View.VISIBLE
             binding.tvEmptyTitle.text = "输入单词即可秒级离线查词"
             hideSuggestions()
@@ -299,6 +313,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun setupSettingsButton() {
+        binding.btnSettings.setOnClickListener {
+            hideSuggestions()
+            hideKeyboard()
+            val sheet = SettingsBottomSheet.newInstance {
+                // Refresh font size
+                wordAdapter.fontSizeSp = appPrefs.getDefinitionTextSizeSp()
+                wordAdapter.notifyDataSetChanged()
+            }
+            sheet.show(supportFragmentManager, SettingsBottomSheet.TAG)
+        }
+    }
+
+    private fun setupClipboardBanner() {
+        binding.btnCloseClipboard.setOnClickListener {
+            binding.cardClipboard.visibility = View.GONE
+        }
+    }
+
+    private fun checkClipboard() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            if (!clipboard.hasPrimaryClip()) return
+
+            val clipItem = clipboard.primaryClip?.getItemAt(0)
+            val text = clipItem?.text?.toString()?.trim() ?: ""
+
+            if (text.isNotEmpty() && text.length in 1..45 && text != lastHandledClip && text != binding.etSearch.text.toString().trim()) {
+                binding.tvClipboardSnippet.text = "检测到复制: \"$text\""
+                binding.cardClipboard.visibility = View.VISIBLE
+
+                binding.btnLookupClipboard.setOnClickListener {
+                    lastHandledClip = text
+                    binding.cardClipboard.visibility = View.GONE
+                    binding.bottomNav.selectedItemId = R.id.nav_search
+                    binding.etSearch.setText(text)
+                    binding.etSearch.setSelection(text.length)
+                    performSearch(text)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "checkClipboard error: ${e.message}")
+        }
+    }
+
     private fun performSearch(query: String) {
         suggestJob?.cancel()
         hideSuggestions()
@@ -307,6 +366,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             try {
                 binding.progressBar.visibility = View.VISIBLE
                 binding.layoutEmptySearch.visibility = View.GONE
+                binding.cardSpellCheck.visibility = View.GONE
 
                 val results = repository.lookup(query, currentMode)
                 binding.progressBar.visibility = View.GONE
@@ -314,10 +374,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (results.isNotEmpty()) {
                     wordAdapter.submitList(results)
                     binding.layoutEmptySearch.visibility = View.GONE
+                    binding.cardSpellCheck.visibility = View.GONE
                 } else {
                     wordAdapter.submitList(emptyList())
                     binding.layoutEmptySearch.visibility = View.VISIBLE
                     binding.tvEmptyTitle.text = getString(R.string.no_results)
+
+                    // Attempt fuzzy spell check correction
+                    val corrections = repository.getSpellCorrection(query)
+                    if (corrections.isNotEmpty()) {
+                        showSpellCorrections(corrections)
+                    } else {
+                        binding.cardSpellCheck.visibility = View.GONE
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Search execution error", e)
@@ -326,6 +395,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 binding.tvEmptyTitle.text = "查询失败，请重试"
             }
         }
+    }
+
+    private fun showSpellCorrections(corrections: List<String>) {
+        binding.chipGroupSpell.removeAllViews()
+        for (cand in corrections) {
+            val chip = Chip(this).apply {
+                text = cand
+                isCheckable = false
+                isClickable = true
+                setOnClickListener {
+                    binding.etSearch.setText(cand)
+                    binding.etSearch.setSelection(cand.length)
+                    binding.cardSpellCheck.visibility = View.GONE
+                    performSearch(cand)
+                }
+            }
+            binding.chipGroupSpell.addView(chip)
+        }
+        binding.cardSpellCheck.visibility = View.VISIBLE
     }
 
     private fun loadFavorites() {
@@ -372,6 +460,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val text = "${entry.displayWord}\n${entry.definition}"
             val clip = ClipData.newPlainText("Dictionary Word", text)
             clipboard.setPrimaryClip(clip)
+            lastHandledClip = text // Avoid self triggering
             Toast.makeText(this, getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.e(TAG, "copy error", e)
@@ -395,7 +484,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 val status = player.setLanguage(targetLocale)
                 if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    // Fallback to standard US/English
                     player.language = Locale.US
                 }
                 player.setSpeechRate(0.95f)

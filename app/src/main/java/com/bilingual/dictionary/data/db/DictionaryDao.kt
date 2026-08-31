@@ -94,6 +94,27 @@ class DictionaryDao(private val dbHelper: DatabaseHelper) {
     }
 
     /**
+     * Get candidate words matching prefix for fuzzy spell checking.
+     */
+    fun getSpellCheckCandidates(rawPrefix: String, limit: Int = 150): List<String> {
+        val prefix = rawPrefix.lowercase().trim()
+        if (prefix.isEmpty()) return emptyList()
+        val p = if (prefix.length >= 2) prefix.take(2) else prefix.take(1)
+        val candidates = mutableListOf<String>()
+        val sql = "SELECT DISTINCT word FROM words WHERE word LIKE ? LIMIT ?"
+        try {
+            readableDb.rawQuery(sql, arrayOf("$p%", limit.toString())).use { cursor ->
+                while (cursor.moveToNext()) {
+                    candidates.add(cursor.getString(0))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getSpellCheckCandidates error: ${e.message}")
+        }
+        return candidates
+    }
+
+    /**
      * Reverse search from Chinese keyword to target language (EN or MS).
      */
     fun searchReverseChinese(keyword: String, targetLang: String? = null): List<DictionaryEntry> {

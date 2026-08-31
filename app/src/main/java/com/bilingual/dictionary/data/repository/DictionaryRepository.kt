@@ -158,4 +158,11 @@ class DictionaryRepository(private val dao: DictionaryDao) {
     suspend fun clearHistory() = withContext(Dispatchers.IO) {
         dao.clearAllHistory()
     }
+
+    suspend fun getSpellCorrection(query: String): List<String> = withContext(Dispatchers.IO) {
+        val trimmed = query.trim()
+        if (trimmed.length < 2 || isChinese(trimmed)) return@withContext emptyList()
+        val candidates = dao.getSpellCheckCandidates(trimmed, 200)
+        com.bilingual.dictionary.core.SpellCorrector.findSuggestions(trimmed, candidates, maxResults = 3)
+    }
 }

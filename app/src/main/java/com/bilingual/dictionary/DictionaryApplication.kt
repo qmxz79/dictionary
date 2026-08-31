@@ -23,6 +23,12 @@ class DictionaryApplication : Application() {
         }
 
         try {
+            com.bilingual.dictionary.data.pref.AppPreferences(this).applyTheme()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error applying theme: ${e.message}")
+        }
+
+        try {
             val dbHelper = DatabaseHelper.getInstance(this)
             val dao = DictionaryDao(dbHelper)
             repository = DictionaryRepository(dao)

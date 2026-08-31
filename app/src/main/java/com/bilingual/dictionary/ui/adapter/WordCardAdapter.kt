@@ -14,7 +14,8 @@ import com.bilingual.dictionary.databinding.ItemWordCardBinding
 class WordCardAdapter(
     private val onSpeakClick: (DictionaryEntry) -> Unit,
     private val onFavoriteClick: (DictionaryEntry, Int) -> Unit,
-    private val onCopyClick: (DictionaryEntry) -> Unit
+    private val onCopyClick: (DictionaryEntry) -> Unit,
+    var fontSizeSp: Float = 16f
 ) : ListAdapter<DictionaryEntry, WordCardAdapter.WordViewHolder>(DiffCallback) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WordViewHolder {
@@ -81,11 +82,13 @@ class WordCardAdapter(
             }
 
             // Definition
+            binding.tvDefinition.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, fontSizeSp)
             binding.tvDefinition.text = entry.definition
 
             // Example
             if (!entry.example.isNullOrEmpty()) {
                 binding.tvExample.visibility = View.VISIBLE
+                binding.tvExample.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (fontSizeSp - 2f).coerceAtLeast(12f))
                 binding.tvExample.text = "例句: ${entry.example}"
             } else {
                 binding.tvExample.visibility = View.GONE
