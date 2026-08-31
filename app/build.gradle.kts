@@ -25,6 +25,17 @@ android {
         noCompress.addAll(listOf("gz", "db"))
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.jks")
+            storePassword = "dictionary123"
+            keyAlias = "dictionary_key"
+            keyPassword = "dictionary123"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -33,11 +44,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug") // Debug key for easy testing
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
