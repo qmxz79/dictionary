@@ -12,6 +12,13 @@
         android:name="android.hardware.camera.autofocus"
         android:required="false" />
 
+    <!-- Required on Android 11+ (API 30+) for TextToSpeech package visibility -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".DictionaryApplication"
         android:allowBackup="true"

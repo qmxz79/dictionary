@@ -108,7 +108,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             isTtsInitialized = false
             // Shutdown any previous instance to avoid ghost callbacks
             tts?.shutdown()
-            tts = TextToSpeech(applicationContext, this)
+            tts = TextToSpeech(this, this)
         } catch (e: Exception) {
             isTtsInitializing = false
             Log.w(TAG, "TTS init error: ${e.message}")

@@ -110,7 +110,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun initTts() {
         try {
-            tts = TextToSpeech(applicationContext, this)
+            tts = TextToSpeech(this, this)
         } catch (e: Exception) {
             Log.w(TAG, "TTS init error: ${e.message}")
         }
@@ -230,12 +230,16 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun bindCameraUseCases() {
         val provider = cameraProvider ?: return
         val rotation = binding.previewView.display?.rotation ?: 0
+        val targetRatio = androidx.camera.core.AspectRatio.RATIO_16_9
+
+        binding.previewView.scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
 
         val cameraSelector = CameraSelector.Builder()
             .requireLensFacing(lensFacing)
             .build()
 
         val preview = Preview.Builder()
+            .setTargetAspectRatio(targetRatio)
             .setTargetRotation(rotation)
             .build()
             .also {
@@ -244,6 +248,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         imageCapture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setTargetAspectRatio(targetRatio)
             .setTargetRotation(rotation)
             .build()
 
@@ -257,6 +262,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setTargetAspectRatio(targetRatio)
             .setTargetRotation(rotation)
             .build()
             .also {
@@ -366,7 +372,7 @@ class CameraActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun processStaticVisionText(visionText: Text, imageWidth: Int, imageHeight: Int) {
         lifecycleScope.launch(Dispatchers.Default) {
             val graphics = mutableListOf<OcrGraphic>()
-            binding.graphicOverlay.setImageSourceInfo(imageWidth, imageHeight, false)
+            binding.graphicOverlay.setImageSourceInfo(imageWidth, imageHeight, isFlipped = false, isFitCenter = true)
 
             for (block in visionText.textBlocks) {
                 for (line in block.lines) {

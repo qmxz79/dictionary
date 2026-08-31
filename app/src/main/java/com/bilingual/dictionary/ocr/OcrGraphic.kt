@@ -15,30 +15,26 @@ class OcrGraphic(
     val boundingBox: Rect,
     val dictionaryEntry: DictionaryEntry? = null
 ) {
-    // drawRect is computed at draw-time so coordinate transforms are always current
+    // drawRect is computed at draw-time to tightly cover original text position
     private var drawRect: RectF = RectF()
 
     private val bgPaint = Paint().apply {
-        color = Color.parseColor("#E61E293B") // Deep slate dark translucent
+        // Semi-transparent frosted dark slate (~75% opacity)
+        color = Color.argb(190, 15, 23, 42)
         style = Paint.Style.FILL
         isAntiAlias = true
     }
 
     private val strokePaint = Paint().apply {
-        color = Color.parseColor("#3B82F6") // Vibrant Blue accent
+        color = Color.argb(220, 56, 189, 248) // Sky Blue subtle accent border
         style = Paint.Style.STROKE
-        strokeWidth = 3f
-        isAntiAlias = true
-    }
-
-    private val textOriginalPaint = Paint().apply {
-        color = Color.WHITE
-        isFakeBoldText = true
+        strokeWidth = 2f
         isAntiAlias = true
     }
 
     private val textTransPaint = Paint().apply {
-        color = Color.parseColor("#38BDF8") // Sky Blue for translation
+        color = Color.WHITE
+        isFakeBoldText = true
         isAntiAlias = true
     }
 
@@ -47,48 +43,45 @@ class OcrGraphic(
     }
 
     /**
-     * Draw is called from GraphicOverlay.onDraw(). The overlay is passed so we
-     * can call mapRect with the latest transformation matrix every frame,
-     * preventing stale coordinates when the overlay hasn't been laid out yet
-     * at OcrGraphic construction time.
+     * Draws the translated text directly over the original text bounding box
+     * in a clean, semi-transparent frosted bubble without blocking surrounding content.
      */
     fun draw(canvas: Canvas, overlay: GraphicOverlay) {
         val screenRect = overlay.mapRect(boundingBox)
 
-        // Guard: if overlay dimensions are 0 the matrix produces (0,0,0,0) — skip
+        // Guard: if overlay dimensions are not ready, skip
         if (screenRect.width() <= 0f && screenRect.height() <= 0f) return
 
-        // Compute text sizes dynamically based on mapped rect height
-        textOriginalPaint.textSize = max(24f, screenRect.height() * 0.42f).coerceAtMost(36f)
-        textTransPaint.textSize = max(22f, screenRect.height() * 0.38f).coerceAtMost(34f)
+        // Auto-scale font size to fit within original line height
+        val fontSize = max(20f, (screenRect.height() * 0.72f).coerceAtMost(38f))
+        textTransPaint.textSize = fontSize
 
-        val paddingH = 16f
-        val paddingV = 10f
+        val textWidth = textTransPaint.measureText(translation)
+        val paddingH = 10f
+        val paddingV = 4f
 
-        val origWidth = textOriginalPaint.measureText(originalText)
-        val transWidth = textTransPaint.measureText(translation)
-        val maxTextWidth = max(origWidth, transWidth)
+        val targetWidth = max(screenRect.width(), textWidth + paddingH * 2)
+        val targetHeight = max(screenRect.height(), fontSize + paddingV * 2)
 
-        val totalWidth = max(screenRect.width(), maxTextWidth + paddingH * 2)
-        val totalHeight = max(
-            screenRect.height(),
-            textOriginalPaint.textSize + textTransPaint.textSize + paddingV * 2.5f
-        )
+        val centerX = screenRect.centerX()
+        val centerY = screenRect.centerY()
 
-        val left = screenRect.left
-        val top = screenRect.top
-        drawRect.set(left, top, left + totalWidth, top + totalHeight)
+        val left = centerX - targetWidth / 2f
+        val top = centerY - targetHeight / 2f
+        val right = left + targetWidth
+        val bottom = top + targetHeight
 
-        // Draw pill background & stroke
-        canvas.drawRoundRect(drawRect, 12f, 12f, bgPaint)
-        canvas.drawRoundRect(drawRect, 12f, 12f, strokePaint)
+        drawRect.set(left, top, right, bottom)
 
-        // Draw original text (Line 1)
-        val line1Y = drawRect.top + paddingV + textOriginalPaint.textSize * 0.85f
-        canvas.drawText(originalText, drawRect.left + paddingH, line1Y, textOriginalPaint)
+        // Draw translucent rounded bubble directly over original text
+        canvas.drawRoundRect(drawRect, 8f, 8f, bgPaint)
+        canvas.drawRoundRect(drawRect, 8f, 8f, strokePaint)
 
-        // Draw translation text (Line 2)
-        val line2Y = line1Y + textTransPaint.textSize + 6f
-        canvas.drawText(translation, drawRect.left + paddingH, line2Y, textTransPaint)
+        // Center translated text vertically and horizontally
+        val fontMetrics = textTransPaint.fontMetrics
+        val textY = centerY - (fontMetrics.ascent + fontMetrics.descent) / 2f
+        val textX = left + paddingH
+
+        canvas.drawText(translation, textX, textY, textTransPaint)
     }
 }

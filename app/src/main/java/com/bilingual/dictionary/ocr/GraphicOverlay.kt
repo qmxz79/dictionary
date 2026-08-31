@@ -8,6 +8,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.max
+import kotlin.math.min
 
 class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
@@ -17,6 +19,7 @@ class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, att
     private var imageWidth = 0
     private var imageHeight = 0
     private var isFlipped = false
+    private var isFitCenter = false
     private val transformationMatrix = Matrix()
 
     var onGraphicClickListener: ((OcrGraphic) -> Unit)? = null
@@ -42,11 +45,16 @@ class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, att
         postInvalidate()
     }
 
-    fun setImageSourceInfo(imageWidth: Int, imageHeight: Int, isFlipped: Boolean) {
+    /**
+     * Set image source dimensions and scaling mode.
+     * @param isFitCenter true for static ImageView (FIT_CENTER), false for CameraX PreviewView (FILL_CENTER)
+     */
+    fun setImageSourceInfo(imageWidth: Int, imageHeight: Int, isFlipped: Boolean, isFitCenter: Boolean = false) {
         synchronized(lock) {
             this.imageWidth = imageWidth
             this.imageHeight = imageHeight
             this.isFlipped = isFlipped
+            this.isFitCenter = isFitCenter
             updateTransformationMatrix()
         }
         postInvalidate()
@@ -56,26 +64,21 @@ class GraphicOverlay(context: Context, attrs: AttributeSet?) : View(context, att
         if (imageWidth <= 0 || imageHeight <= 0 || width <= 0 || height <= 0) return
 
         transformationMatrix.reset()
-        val viewAspectRatio = width.toFloat() / height.toFloat()
-        val imageAspectRatio = imageWidth.toFloat() / imageHeight.toFloat()
 
-        val scale: Float
-        var dx = 0f
-        var dy = 0f
-
-        if (viewAspectRatio > imageAspectRatio) {
-            // View is wider than image — scale to fill width
-            scale = width.toFloat() / imageWidth.toFloat()
-            dy = (height - imageHeight * scale) / 2f
+        val scale = if (isFitCenter) {
+            // FIT_CENTER: scale so entire image is visible (letterbox/pillarbox)
+            min(width.toFloat() / imageWidth.toFloat(), height.toFloat() / imageHeight.toFloat())
         } else {
-            // View is taller than image — scale to fill height
-            scale = height.toFloat() / imageHeight.toFloat()
-            dx = (width - imageWidth * scale) / 2f
+            // FILL_CENTER: scale so entire view is covered (CameraX PreviewView)
+            max(width.toFloat() / imageWidth.toFloat(), height.toFloat() / imageHeight.toFloat())
         }
+
+        val dx = (width - imageWidth * scale) / 2f
+        val dy = (height - imageHeight * scale) / 2f
 
         transformationMatrix.postScale(scale, scale)
         if (isFlipped) {
-            transformationMatrix.postScale(-1f, 1f, width / 2f, height / 2f)
+            transformationMatrix.postScale(-1f, 1f, imageWidth * scale / 2f, imageHeight * scale / 2f)
         }
         transformationMatrix.postTranslate(dx, dy)
     }
