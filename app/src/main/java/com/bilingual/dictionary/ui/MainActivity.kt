@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var appPrefs: AppPreferences
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
+    private var isTtsInitializing = false
 
     private lateinit var wordAdapter: WordCardAdapter
     private lateinit var suggestionAdapter: SuggestionAdapter
@@ -101,9 +102,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun initTts() {
+        if (isTtsInitializing) return  // Already initializing, don't create a second instance
         try {
+            isTtsInitializing = true
+            isTtsInitialized = false
+            // Shutdown any previous instance to avoid ghost callbacks
+            tts?.shutdown()
             tts = TextToSpeech(applicationContext, this)
         } catch (e: Exception) {
+            isTtsInitializing = false
             Log.w(TAG, "TTS init error: ${e.message}")
         }
     }
@@ -497,7 +504,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (tts == null || !isTtsInitialized) {
                 // TTS not ready — save entry for deferred playback once onInit fires
                 pendingSpeakEntry = entry
-                initTts()
+                if (!isTtsInitializing) {
+                    initTts()
+                }
                 Toast.makeText(this, "正在准备语音发音...", Toast.LENGTH_SHORT).show()
                 return
             }
@@ -510,31 +519,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun doSpeak(entry: DictionaryEntry) {
-        tts?.let { player ->
-            val wordToSpeak = entry.displayWord
+        val player = tts
+        if (player == null) {
+            Toast.makeText(this, "语音引擎未就绪", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-            val targetLocale = when (entry.lang.lowercase()) {
-                "ms" -> Locale("ms", "MY")
-                "zh" -> Locale.CHINESE
-                "online" -> {
-                    // Online translation entries: detect if displayWord is Chinese or Latin
-                    if (repository.isChinese(wordToSpeak)) Locale.CHINESE else Locale.US
-                }
-                else -> Locale.US
+        val wordToSpeak = entry.displayWord
+
+        val targetLocale = when (entry.lang.lowercase()) {
+            "ms" -> Locale("ms", "MY")
+            "zh" -> Locale.CHINESE
+            "online" -> {
+                if (repository.isChinese(wordToSpeak)) Locale.CHINESE else Locale.US
             }
+            else -> Locale.US
+        }
 
-            val status = player.setLanguage(targetLocale)
-            if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
-                // Try English as universal fallback
-                val fallbackStatus = player.setLanguage(Locale.US)
-                if (fallbackStatus == TextToSpeech.LANG_MISSING_DATA || fallbackStatus == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Toast.makeText(this, "设备不支持该语言发音", Toast.LENGTH_SHORT).show()
-                    return
-                }
-            }
+        // Try to set language; if it fails, try English fallback
+        // Note: many phones return LANG_MISSING_DATA but can still speak, so we don't abort
+        val status = player.setLanguage(targetLocale)
+        if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.w(TAG, "TTS language $targetLocale not fully supported (status=$status), trying Locale.US fallback")
+            player.setLanguage(Locale.US)
+        }
 
-            player.setSpeechRate(0.95f)
-            player.speak(wordToSpeak, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
+        player.setSpeechRate(0.95f)
+        val speakResult = player.speak(wordToSpeak, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
+        if (speakResult == TextToSpeech.ERROR) {
+            Log.e(TAG, "TTS speak() returned ERROR for word: $wordToSpeak")
+            Toast.makeText(this, "发音失败，请检查设备 TTS 引擎", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -552,10 +566,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(status: Int) {
+        isTtsInitializing = false
         try {
             if (status == TextToSpeech.SUCCESS) {
                 isTtsInitialized = true
                 tts?.language = Locale.US
+                Log.d(TAG, "TTS initialized successfully")
                 // If user tapped speak before TTS was ready, play it now
                 pendingSpeakEntry?.let { entry ->
                     pendingSpeakEntry = null
@@ -564,6 +580,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             } else {
                 isTtsInitialized = false
                 Log.w(TAG, "TTS initialization failed with status: $status")
+                // Clear pending and notify user
+                if (pendingSpeakEntry != null) {
+                    pendingSpeakEntry = null
+                    runOnUiThread {
+                        Toast.makeText(this, "语音引擎初始化失败，请检查系统 TTS 设置", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "TTS onInit error: ${e.message}")
