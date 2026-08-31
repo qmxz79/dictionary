@@ -490,31 +490,51 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private var pendingSpeakEntry: DictionaryEntry? = null
+
     private fun speakWord(entry: DictionaryEntry) {
         try {
             if (tts == null || !isTtsInitialized) {
+                // TTS not ready — save entry for deferred playback once onInit fires
+                pendingSpeakEntry = entry
                 initTts()
                 Toast.makeText(this, "正在准备语音发音...", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            tts?.let { player ->
-                val targetLocale = when (entry.lang.lowercase()) {
-                    "ms" -> Locale("ms", "MY")
-                    "zh" -> Locale.CHINESE
-                    else -> Locale.US
-                }
-
-                val status = player.setLanguage(targetLocale)
-                if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    player.language = Locale.US
-                }
-                player.setSpeechRate(0.95f)
-                player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
-            }
+            doSpeak(entry)
         } catch (e: Exception) {
             Log.e(TAG, "TTS speak error", e)
             Toast.makeText(this, "语音发音异常", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun doSpeak(entry: DictionaryEntry) {
+        tts?.let { player ->
+            val wordToSpeak = entry.displayWord
+
+            val targetLocale = when (entry.lang.lowercase()) {
+                "ms" -> Locale("ms", "MY")
+                "zh" -> Locale.CHINESE
+                "online" -> {
+                    // Online translation entries: detect if displayWord is Chinese or Latin
+                    if (repository.isChinese(wordToSpeak)) Locale.CHINESE else Locale.US
+                }
+                else -> Locale.US
+            }
+
+            val status = player.setLanguage(targetLocale)
+            if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
+                // Try English as universal fallback
+                val fallbackStatus = player.setLanguage(Locale.US)
+                if (fallbackStatus == TextToSpeech.LANG_MISSING_DATA || fallbackStatus == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Toast.makeText(this, "设备不支持该语言发音", Toast.LENGTH_SHORT).show()
+                    return
+                }
+            }
+
+            player.setSpeechRate(0.95f)
+            player.speak(wordToSpeak, TextToSpeech.QUEUE_FLUSH, null, "tts_${entry.word}")
         }
     }
 
@@ -536,8 +556,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (status == TextToSpeech.SUCCESS) {
                 isTtsInitialized = true
                 tts?.language = Locale.US
+                // If user tapped speak before TTS was ready, play it now
+                pendingSpeakEntry?.let { entry ->
+                    pendingSpeakEntry = null
+                    doSpeak(entry)
+                }
             } else {
                 isTtsInitialized = false
+                Log.w(TAG, "TTS initialization failed with status: $status")
             }
         } catch (e: Exception) {
             Log.w(TAG, "TTS onInit error: ${e.message}")

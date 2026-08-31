@@ -122,15 +122,30 @@ class WordDetailBottomSheet : BottomSheetDialogFragment() {
 
     private fun speakWord(entry: DictionaryEntry) {
         try {
-            tts?.let { player ->
-                val targetLocale = when (entry.lang.lowercase()) {
-                    "ms" -> Locale("ms", "MY")
-                    "zh" -> Locale.CHINESE
-                    else -> Locale.US
-                }
-                player.language = targetLocale
-                player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_detail_${entry.word}")
+            val player = tts
+            if (player == null) {
+                Toast.makeText(requireContext(), "语音引擎未就绪，请稍后重试", Toast.LENGTH_SHORT).show()
+                return
             }
+
+            val targetLocale = when (entry.lang.lowercase()) {
+                "ms" -> Locale("ms", "MY")
+                "zh" -> Locale.CHINESE
+                else -> Locale.US
+            }
+
+            val status = player.setLanguage(targetLocale)
+            if (status == TextToSpeech.LANG_MISSING_DATA || status == TextToSpeech.LANG_NOT_SUPPORTED) {
+                // Fallback to English
+                val fallback = player.setLanguage(Locale.US)
+                if (fallback == TextToSpeech.LANG_MISSING_DATA || fallback == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Toast.makeText(requireContext(), "设备不支持该语言发音", Toast.LENGTH_SHORT).show()
+                    return
+                }
+            }
+
+            player.setSpeechRate(0.95f)
+            player.speak(entry.displayWord, TextToSpeech.QUEUE_FLUSH, null, "tts_detail_${entry.word}")
         } catch (e: Exception) {
             Toast.makeText(requireContext(), "发音失败", Toast.LENGTH_SHORT).show()
         }
